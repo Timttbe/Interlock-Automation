@@ -14,6 +14,7 @@
 #define INPUT 1
 #define OUTPUT 3
 #define INPUT_PULLUP 5
+#define F(texto) (texto)
 #define constrain(amt, low, high) ((amt) < (low) ? (low) : ((amt) > (high) ? (high) : (amt)))
 
 inline size_t strlcpy(char* dst, const char* src, size_t size) {
@@ -39,6 +40,7 @@ class String {
   const char* c_str() const { return s_.c_str(); }
   size_t length() const { return s_.size(); }
   bool isEmpty() const { return s_.empty(); }
+  char operator[](size_t i) const { return s_[i]; }
   String& operator+=(const String& o) { s_ += o.s_; return *this; }
   String& operator+=(const char* o) { s_ += o; return *this; }
   String& operator+=(char c) { s_ += c; return *this; }

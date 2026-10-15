@@ -15,7 +15,7 @@
 #define SENHA_ADMIN_EXEMPLO "interlock123"
 #define CHAVE_REDE_EXEMPLO "troque-esta-chave-do-intertravamento"
 
-#define FW_VERSAO "7.0.0"
+#define FW_VERSAO "7.1.1"
 
 // ===================== Wi-Fi de fábrica =====================
 // Vazio = a placa liga só a rede própria ("Interlock-...") até o Wi-Fi ser configurado pela página.

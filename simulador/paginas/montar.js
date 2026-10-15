@@ -6,13 +6,42 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 
-const src = process.argv[2] || path.join(__dirname, '..', '..', 'src');
+const raiz = path.join(__dirname, '..', '..');
+const src = process.argv[2] || path.join(raiz, 'src');
+const versao = fs.readFileSync(path.join(raiz, 'include', 'config.h'), 'utf8').match(/#define FW_VERSAO "([^"]+)"/)[1];
+
+// Lê a expressão depois de "=" até o ";": textos R"x(...)x", "..." e a macro FW_VERSAO, juntos.
+function lerExpressao(texto, inicio) {
+  let i = inicio, valor = '';
+  for (;;) {
+    while (/\s/.test(texto[i])) i++;
+    if (texto[i] === ';') return valor;
+    if (texto.startsWith('R"', i)) {
+      const abre = texto.indexOf('(', i);
+      const delim = ')' + texto.slice(i + 2, abre) + '"';
+      const fecha = texto.indexOf(delim, abre);
+      valor += texto.slice(abre + 1, fecha);
+      i = fecha + delim.length;
+    } else if (texto[i] === '"') {
+      let j = i + 1;
+      while (texto[j] !== '"') j += texto[j] === '\\' ? 2 : 1;
+      valor += JSON.parse(texto.slice(i, j + 1));
+      i = j + 1;
+    } else if (texto.startsWith('FW_VERSAO', i)) {
+      valor += versao;
+      i += 'FW_VERSAO'.length;
+    } else {
+      throw new Error('não entendi o texto perto de: ' + texto.slice(i, i + 40));
+    }
+  }
+}
+
 const partes = {};
 for (const arq of ['pagina_comum.h', 'pagina_porta.h', 'pagina_porteiro.h']) {
   const texto = fs.readFileSync(path.join(src, arq), 'utf8');
-  const re = /static const char (\w+)\[\] = (?:R"(\w*)\(([\s\S]*?)\)\2"|"((?:[^"\\]|\\.)*)");/g;
+  const re = /static const char (\w+)\[\] = /g;
   let m;
-  while ((m = re.exec(texto))) partes[m[1]] = m[3] !== undefined ? m[3] : JSON.parse('"' + m[4] + '"');
+  while ((m = re.exec(texto))) partes[m[1]] = lerExpressao(texto, re.lastIndex);
 }
 const pagina = (corpo, js) =>
   ['PAGINA_INICIO', 'CSS_COMUM', 'PAGINA_CABECALHO', corpo, 'SECOES_COMUNS', 'PAGINA_SCRIPT', 'JS_COMUM', js, 'PAGINA_FIM']
@@ -24,8 +53,9 @@ const pagina = (corpo, js) =>
 
 const paginas = {porta: pagina('CORPO_PORTA', 'JS_PORTA'), portaria: pagina('CORPO_PORTEIRO', 'JS_PORTEIRO')};
 for (const [nome, html] of Object.entries(paginas)) {
-  const js = html.match(/<script>([\s\S]*)<\/script>/)[1];
-  new vm.Script(js, {filename: nome + '.js'});  // lança erro se a sintaxe estiver errada
+  for (const script of html.match(/<script>[\s\S]*?<\/script>/g)) {
+    new vm.Script(script.slice(8, -9), {filename: nome + '.js'});  // lança erro se a sintaxe estiver errada
+  }
   fs.writeFileSync(path.join(__dirname, nome + '.html'), html);
-  console.log(`${nome}.html: ${html.length} bytes, JavaScript ok`);
+  console.log(`${nome}.html: ${Buffer.byteLength(html)} bytes, JavaScript ok`);
 }

@@ -19,6 +19,7 @@
 #include "porta.h"
 #include "config.h"
 #include "configuracao.h"
+#include "contas.h"
 #include "logica.h"
 #include "protocolo.h"
 #include "registro.h"
@@ -284,11 +285,15 @@ void tratarMensagem(Papel origem, char tipo, const char* dados, unsigned long ag
     } else if (origem == Papel::PORTEIRO) {
       infoPortaria.noticia.chegou(agora);
       infoPortaria.bypass = campoLogico(dados, "byp");
+      char versao[12];
+      if (campoTexto(dados, "ctv", versao, sizeof(versao))) versaoContasDaPortaria(strtoul(versao, nullptr, 16), agora);
     }
   } else if (origem == Papel::PORTEIRO && tipo == MSG_RESPOSTA) {
     tratarResposta(dados, agora);
   } else if (origem == Papel::PORTEIRO && tipo == MSG_LIBERAR) {
     tratarLiberar(dados, agora);
+  } else if (origem == Papel::PORTEIRO && tipo == MSG_CONTAS) {
+    contasDaMensagem(dados);
   }
 }
 

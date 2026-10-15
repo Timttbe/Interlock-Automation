@@ -21,6 +21,17 @@ class Preferences {
   void putUChar(const char* k, uint8_t v) { m()[k] = std::to_string(v); }
   void putBool(const char* k, bool v) { m()[k] = v ? "1" : "0"; }
   void putString(const char* k, const char* v) { m()[k] = v; }
+  bool isKey(const char* k) { return tem(k); }
+  size_t getBytesLength(const char* k) { return tem(k) ? m()[k].size() : 0; }
+  size_t getBytes(const char* k, void* v, size_t n) {
+    if (!tem(k) || m()[k].size() > n) return 0;
+    memcpy(v, m()[k].data(), m()[k].size());
+    return m()[k].size();
+  }
+  size_t putBytes(const char* k, const void* v, size_t n) {
+    m()[k].assign(static_cast<const char*>(v), n);
+    return n;
+  }
 
  private:
   static std::map<std::string, std::string>& m() {

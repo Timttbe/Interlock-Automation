@@ -42,6 +42,7 @@ sh simulador/rodar.sh
 | 17 | Contador `millis()` estourando (placa ligada há 49,7 dias) |
 | 18 | Sem portaria e com 25% de perda, facial nas duas quase juntos |
 | 19 | Botão da portaria contra o facial da outra porta, com 10% de perda |
+| 20 | Contas criadas e apagadas na portaria chegam às portas, inclusive a que estava fora da rede |
 
 A assinatura das mensagens no simulador é um hash simples (`stubs/mbedtls/md.h`), não o HMAC-SHA256
 da placa: o que se testa é que mensagem alterada ou repetida é recusada.
@@ -55,3 +56,4 @@ node simulador/paginas/servidor.js   # portaria em http://localhost:8471, porta 
 
 O servidor imita a API da placa com dados de exemplo (uma porta em alarme, uma placa sem
 comunicação, um botão travado) para ver todos os estados da página.
+Contas de teste: `admin` / `interlock123` (admin) e `joao` / `123456` (usuário).

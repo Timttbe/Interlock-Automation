@@ -1,5 +1,6 @@
 // Servidor de teste das páginas: 8471 = portaria, 8472 = porta A. As páginas são as montadas por
 // montar.js a partir dos .h do firmware; a API imita o JSON do firmware com um estado simulado.
+// Contas de teste: admin / interlock123 (admin) e joao / 123456 (usuário).
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -14,14 +15,31 @@ const portas = {
   B: {liberadaAte: 0, abertaDesde: Date.now() - 75000, origem: 'botão', resultado: null},  // em alarme
 };
 let bypassVirtual = false;
-reg('Portaria ligou. Firmware 7.0.0. Último reinício: ligou na energia');
+// Contas de teste: admin / interlock123 (admin) e joao / 123456 (usuário)
+const contas = {admin: {senha: 'interlock123', admin: true}, joao: {senha: '123456', admin: false}};
+const sessoes = {};  // token -> nome
+function contaDoPedido(req) {
+  const m = /(?:^|;\s*)sessao=([0-9a-f]+)/.exec(req.headers.cookie || '');
+  const nome = m && sessoes[m[1]];
+  return nome && contas[nome] ? {nome, admin: contas[nome].admin} : null;
+}
+// Logo: os mesmos PNG embutidos no firmware (src/logo.h)
+const logoH = fs.readFileSync(path.join(__dirname, '..', '..', 'src', 'logo.h'), 'utf8');
+const logo = nome => Buffer.from(logoH.match(new RegExp(nome + '\\[\\] = \\{([^}]*)\\}'))[1].split(',').map(s => s.trim()).filter(Boolean).map(s => parseInt(s, 16)));
+const LOGOS = {'/logo-claro.png': logo('LOGO_CLARO'), '/logo-escuro.png': logo('LOGO_ESCURO')};
+reg('Portaria ligou. Firmware 7.1.0. Último reinício: ligou na energia');
 reg('Porta A encontrada na rede (192.168.0.51)');
 reg('Porta B encontrada na rede (192.168.0.52)');
 reg('ALARME: Porta B aberta há muito tempo (buzzer ligado)');
 
-function comum(papel, nome, env) {
+function comum(papel, nome, env, conta) {
+  const lista = Object.entries(contas).map(([n, c]) => ({nome: n, admin: c.admin}));
   return {
-    papel, nome, env, fw: '7.0.0', compilado: 'Oct 13 2026 13:30:00', up: seg() + 3600, reinicio: 'ligou na energia',
+    conta: {nome: conta.nome, admin: conta.admin, senhaDeFabrica: conta.admin && contas.admin.senha === 'interlock123'},
+    contas: papel === 'PORTEIRO'
+      ? {daPortaria: false, total: lista.length, max: 10, ...(conta.admin ? {lista} : {})}
+      : {daPortaria: true, total: lista.length, max: 10, atualizada: true, portariaConhecida: true, ...(conta.admin ? {lista} : {})},
+    papel, nome, env, fw: '7.1.0', compilado: 'Oct 13 2026 13:30:00', up: seg() + 3600, reinicio: 'ligou na energia',
     heap: 210000, senhaPadrao: true, conflito: '', rejeitadas: 0,
     wifi: {conectado: true, ssid: 'Condominio', ip: env === 'porteiro' ? '192.168.0.50' : '192.168.0.51',
            mascara: '255.255.255.0', gateway: '192.168.0.1', dns: '192.168.0.1', rssi: -58, canal: 6,
@@ -46,8 +64,8 @@ function estadoPorta(L) {
           origem: p.origem};
 }
 
-function jsonPortaria() {
-  const e = comum('PORTEIRO', 'Portaria', 'porteiro');
+function jsonPortaria(conta) {
+  const e = comum('PORTEIRO', 'Portaria', 'porteiro', conta);
   const portasJson = ['A', 'B'].map(L => {
     const s = estadoPorta(L), o = estadoPorta(L === 'A' ? 'B' : 'A');
     const bloqueio = bypassVirtual ? '' : o.liberada ? 'a outra porta está destravada' : o.aberta ? 'a outra porta está aberta' : '';
@@ -73,8 +91,8 @@ function jsonPortaria() {
 
 let pedidoAte = 0;
 const cfgPorta = {tempoAbertura: 5, tempoAlarme: 60, liberarSemComunicacao: true};
-function jsonPorta() {
-  const e = comum('PORTA_A', 'Porta A', 'porta_a');
+function jsonPorta(conta) {
+  const e = comum('PORTA_A', 'Porta A', 'porta_a', conta);
   const s = estadoPorta('A'), o = estadoPorta('B');
   e.porta = {
     ...s, comBypass: false, sinaleira: s.liberada, modo: 'C', pedido: pedidoAte > Date.now(), portaria: true, bypass: bypassVirtual,
@@ -126,9 +144,55 @@ function servir(porta, pagina, json) {
     };
     if (url === '/') {
       res.writeHead(200, {'Content-Type': 'text/html; charset=utf-8'});
-      res.end(fs.readFileSync(path.join(__dirname, pagina)));
-    } else if (url === '/api/estado') {
-      enviar(200, json());
+      return res.end(fs.readFileSync(path.join(__dirname, pagina)));
+    }
+    if (LOGOS[url]) {
+      res.writeHead(200, {'Content-Type': 'image/png'});
+      return res.end(LOGOS[url]);
+    }
+    if (url === '/api/entrar') {
+      const a = await corpo(req);
+      const nome = (a.get('usuario') || '').trim().toLowerCase();
+      if (!contas[nome] || contas[nome].senha !== a.get('senha')) return enviar(401, {ok: false, erro: 'Usuário ou senha errados.'});
+      const token = require('crypto').randomBytes(16).toString('hex');
+      sessoes[token] = nome;
+      reg('Entrou na página: ' + nome);
+      res.setHeader('Set-Cookie', `sessao=${token}; Path=/; HttpOnly; SameSite=Strict`);
+      return enviar(200, {ok: true, msg: 'Olá, ' + nome + '!'});
+    }
+    const conta = contaDoPedido(req);
+    if (url === '/api/sair') {
+      res.setHeader('Set-Cookie', 'sessao=; Path=/; Max-Age=0');
+      return enviar(200, {ok: true, msg: 'Até logo.'});
+    }
+    if (url.startsWith('/api/') && !conta) return enviar(401, {ok: false, erro: 'Entre com seu usuário e senha.'});
+    const soAdmin = ['/api/rede', '/api/redes', '/api/atualizar', '/api/contas/criar', '/api/contas/apagar', '/api/contas/senha'];
+    if (soAdmin.includes(url) && !conta.admin) return enviar(403, {ok: false, erro: 'Só o admin pode fazer isso.'});
+    if (url === '/api/estado') {
+      enviar(200, json(conta));
+    } else if (url === '/api/contas/criar') {
+      const a = await corpo(req);
+      const nome = (a.get('nome') || '').trim().toLowerCase();
+      if (contas[nome]) return enviar(400, {ok: false, erro: 'Já existe uma conta com esse nome.'});
+      if ((a.get('senha') || '').length < 6) return enviar(400, {ok: false, erro: 'A senha precisa ter de 6 a 63 caracteres.'});
+      contas[nome] = {senha: a.get('senha'), admin: false};
+      reg('Conta criada: ' + nome);
+      enviar(200, {ok: true, msg: `Conta "${nome}" criada.`});
+    } else if (url === '/api/contas/apagar') {
+      const a = await corpo(req);
+      delete contas[a.get('nome')];
+      enviar(200, {ok: true, msg: `Conta "${a.get('nome')}" apagada.`});
+    } else if (url === '/api/contas/senha') {
+      const a = await corpo(req);
+      contas[a.get('nome')].senha = a.get('senha');
+      enviar(200, {ok: true, msg: `Senha de "${a.get('nome')}" trocada.`});
+    } else if (url === '/api/minha-senha') {
+      const a = await corpo(req);
+      if (contas[conta.nome].senha !== a.get('atual')) return enviar(400, {ok: false, erro: 'A senha atual não confere.'});
+      contas[conta.nome].senha = a.get('nova');
+      enviar(200, {ok: true, msg: 'Sua senha foi trocada.'});
+    } else if (url === '/api/reiniciar') {
+      enviar(200, {ok: true, msg: 'A placa vai reiniciar.'});
     } else if (url === '/api/abrir') {
       const a = await corpo(req);
       if (pagina === 'portaria.html') {

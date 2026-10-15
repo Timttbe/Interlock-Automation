@@ -1,5 +1,6 @@
 #include "atualizacao.h"
 #include <Update.h>
+#include "acesso.h"
 #include "config.h"
 #include "logica.h"
 #include "papel.h"
@@ -44,7 +45,7 @@ void receber() {
       erro = "";
       marcaCasada = 0;
       marcaEncontrada = false;
-      if (!servidor.authenticate("admin", SENHA_ADMIN)) return;
+      if (!adminNoPedido()) return;  // admin logado na página, ou usuário e senha de admin (curl)
       registrar("Recebendo firmware \"%s\"...", envio.filename.c_str());
       colocarEmEstadoSeguro();
       iniciada = Update.begin(UPDATE_SIZE_UNKNOWN);
@@ -76,7 +77,7 @@ void receber() {
 }
 
 void concluir() {
-  if (!autorizado()) return;
+  if (!adminNoPedido()) return responderErro("Só o admin pode gravar firmware.", 403);
   if (!iniciada && erro.isEmpty()) erro = "nenhum arquivo recebido";
   if (erro.isEmpty()) {
     registrar("Firmware novo gravado");

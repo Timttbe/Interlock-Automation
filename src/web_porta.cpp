@@ -5,6 +5,7 @@
 #include "papel.h"
 #ifdef PAPEL_E_PORTA
 
+#include "acesso.h"
 #include "config.h"
 #include "configuracao.h"
 #include "json.h"
@@ -17,15 +18,17 @@
 
 namespace {
 
+// Sem login: a página só tem o código; os dados vêm de /api/estado, que pede login.
 void tratarPagina() {
-  if (!autorizado()) return;
   static const char* const partes[] = {PAGINA_INICIO, CSS_COMUM, PAGINA_CABECALHO, CORPO_PORTA, SECOES_COMUNS,
                                        PAGINA_SCRIPT, JS_COMUM, JS_PORTA, PAGINA_FIM};
   enviarPagina(partes, sizeof(partes) / sizeof(partes[0]));
 }
 
 void tratarAbrir() {
-  if (!autorizado()) return;
+  String usuario;
+  if (!exigirLogin(&usuario)) return;
+  registrar("%s pediu pela página para abrir a porta", usuario.c_str());
   unsigned long agora = millis();
   pedirAbertura(Origem::PAGINA_PORTA, agora);
   const EstadoPorta& e = estadoPorta(agora);
@@ -36,7 +39,8 @@ void tratarAbrir() {
 }
 
 void tratarOperacao() {
-  if (!autorizado()) return;
+  String usuario;
+  if (!exigirLogin(&usuario)) return;
   long abertura = servidor.arg("tempoAbertura").toInt();
   long alarme = servidor.arg("tempoAlarme").toInt();
   if (abertura < TEMPO_ABERTURA_MIN_S || abertura > TEMPO_ABERTURA_MAX_S) {
@@ -49,8 +53,8 @@ void tratarOperacao() {
   cfgOperacao.tempoAlarmeS = alarme;
   cfgOperacao.liberarSemComunicacao = servidor.arg("semComunicacao") != "0";
   salvarOperacao();
-  registrar("Funcionamento alterado pela página: abertura %ld s, alarme %ld s, sem comunicação: %s", abertura,
-            alarme, cfgOperacao.liberarSemComunicacao ? "libera" : "bloqueia");
+  registrar("Funcionamento alterado (%s): abertura %ld s, alarme %ld s, sem comunicação: %s", usuario.c_str(),
+            abertura, alarme, cfgOperacao.liberarSemComunicacao ? "libera" : "bloqueia");
   responderOk("Salvo. Já está valendo.");
 }
 

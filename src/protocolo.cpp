@@ -31,7 +31,7 @@
 namespace {
 
 constexpr char PREFIXO[] = "ITL1|";
-constexpr size_t TAM_MAX = 480;
+constexpr size_t TAM_MAX = 1400;  // cabe num pacote Wi-Fi sem fragmentar; a maior é a lista de contas
 constexpr size_t BYTES_ASSINATURA = 16;  // primeiros 128 bits do HMAC-SHA256
 constexpr size_t TAM_ASSINATURA = BYTES_ASSINATURA * 2;
 constexpr unsigned long AVISO_REPETIDO_MS = 60000;
@@ -55,6 +55,10 @@ unsigned long ultimoAvisoRecusa = 0;
 bool avisouRecusa = false;
 char conflito[16] = "";
 unsigned long ultimoAvisoConflito = 0;
+// Fora da pilha, porque são grandes. O programa roda numa linha só e um envio nunca acontece no
+// meio de outro, então um de cada basta (um pacote recebido pode responder com um envio).
+char entrada[TAM_MAX + 1];
+char saida[TAM_MAX + 1];
 
 void assinar(const char* texto, size_t tamanho, char* saidaHex) {
   static const char HEXA[] = "0123456789abcdef";
@@ -211,13 +215,12 @@ void atualizarProtocolo(unsigned long agora) {
   for (int i = 0; i < 8; i++) {  // no máximo 8 por volta, para não segurar o resto do programa
     int tamanho = udp.parsePacket();
     if (tamanho <= 0) break;
-    char buf[TAM_MAX + 1];
-    int lidos = udp.read(buf, TAM_MAX);
+    int lidos = udp.read(entrada, TAM_MAX);
     IPAddress de = udp.remoteIP();
     udp.flush();
     if (lidos <= 0 || tamanho > static_cast<int>(TAM_MAX)) continue;  // grande demais: não é nosso
-    buf[lidos] = 0;
-    processar(buf, de, agora);
+    entrada[lidos] = 0;
+    processar(entrada, de, agora);
   }
 
   for (uint8_t i = 0; i < NUM_PAPEIS; i++) {
@@ -239,10 +242,9 @@ uint32_t mensagensRecusadas() { return recusadas; }
 const char* conflitoDePapel() { return conflito; }
 
 void enviarPara(Papel destino, char tipo, const String& dados) {
-  char buf[TAM_MAX + 1];
-  size_t n = montar(buf, sizeof(buf), tipo, dados.c_str());
+  size_t n = montar(saida, sizeof(saida), tipo, dados.c_str());
   if (!n) return;
-  transmitir(parOnline(destino) ? pares[indice(destino)].info.ip : BROADCAST, buf, n);
+  transmitir(parOnline(destino) ? pares[indice(destino)].info.ip : BROADCAST, saida, n);
 }
 
 void enviarEstado(const String& dados, bool direto) {
@@ -252,15 +254,14 @@ void enviarEstado(const String& dados, bool direto) {
   completo += ";fw=" FW_VERSAO ";up=";
   completo += millis() / 1000;
 
-  char buf[TAM_MAX + 1];
-  size_t n = montar(buf, sizeof(buf), MSG_ESTADO, completo.c_str());
+  size_t n = montar(saida, sizeof(saida), MSG_ESTADO, completo.c_str());
   if (!n) return;
-  transmitir(BROADCAST, buf, n);
+  transmitir(BROADCAST, saida, n);
   // A mesma mensagem direto: quem receber as duas descarta a segunda (mesmo seq).
   if (direto) {
     for (uint8_t i = 0; i < NUM_PAPEIS; i++) {
       Papel p = static_cast<Papel>(i);
-      if (parOnline(p)) transmitir(pares[i].info.ip, buf, n);
+      if (parOnline(p)) transmitir(pares[i].info.ip, saida, n);
     }
   }
 }

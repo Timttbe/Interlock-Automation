@@ -27,6 +27,10 @@ static const char CORPO_PORTA[] = R"HTML(
 <div class="dica">Com a portaria fora do ar, mas a outra porta comunicando, as duas portas continuam se respeitando sozinhas.</div>
 <button>Salvar</button>
 </form>
+
+<h2>Contas</h2>
+<div class="card"><div id="contasInfo"></div>
+<div class="dica">As contas são criadas e editadas na página da portaria; esta porta recebe uma cópia e a usa mesmo sem comunicação.</div></div>
 )HTML";
 
 static const char JS_PORTA[] = R"JS(
@@ -49,7 +53,11 @@ function desenhar(e){
   if(!opPreenchido){
     const f=$('#formOp');
     f.tempoAbertura.value=p.cfg.tempoAbertura;f.tempoAlarme.value=p.cfg.tempoAlarme;
-    f.semComunicacao.value=p.cfg.liberarSemComunicacao?'1':'0';opPreenchido=true}}
+    f.semComunicacao.value=p.cfg.liberarSemComunicacao?'1':'0';opPreenchido=true}
+  const c=e.contas;
+  $('#contasInfo').innerHTML=linha('Cópia da portaria',c.total+' conta(s) · '+
+    (c.atualizada?pill('atualizada','ok'):c.portariaConhecida?pill('atualizando...','aviso'):pill('portaria sem comunicação','perigo')))+
+    (c.lista?c.lista.map(x=>linha(x.nome,x.admin?pill('admin','aviso'):pill('usuário'))).join(''):'')}
 
 $('#btnAbrir').onclick=()=>acao('/api/abrir');
 ciclo();

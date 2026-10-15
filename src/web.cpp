@@ -1,11 +1,14 @@
 #include "web.h"
 #include <WiFi.h>
 #include <time.h>
+#include "acesso.h"
 #include "atualizacao.h"
 #include "config.h"
 #include "configuracao.h"
+#include "contas.h"
 #include "json.h"
 #include "logica.h"
+#include "logo.h"
 #include "papel.h"
 #include "protocolo.h"
 #include "rede_wifi.h"
@@ -23,14 +26,29 @@ void enviarJson(const String& json) {
   servidor.send(200, "application/json", json);
 }
 
+void enviarLogo(const uint8_t* png, size_t tamanho) {
+  servidor.sendHeader("Cache-Control", "public, max-age=604800");  // a página pede com ?v=<versão>
+  servidor.send_P(200, "image/png", reinterpret_cast<const char*>(png), tamanho);
+}
+
 void tratarEstado() {
-  if (!autorizado()) return;
+  String usuario;
+  Nivel nivel;
+  if (!exigirLogin(&usuario, &nivel)) return;
+  bool admin = nivel == Nivel::ADMIN;
   unsigned long agora = millis();
   bool conectado = wifiConectado();
   String s;
   s.reserve(8192);
   JsonEscritor j(s);
   j.abrirObjeto();
+
+  j.abrirObjeto("conta");
+  j.texto("nome", usuario);
+  j.logico("admin", admin);
+  j.logico("senhaDeFabrica", admin && senhaAdminDeFabrica());
+  j.fecharObjeto();
+  contasJson(j, admin);
 
   j.texto("papel", NOME_PAPEL);
   j.texto("nome", nomeExibicao(MEU_PAPEL));
@@ -112,7 +130,8 @@ void tratarEstado() {
 }
 
 void tratarSalvarRede() {
-  if (!autorizado()) return;
+  String usuario;
+  if (!exigirAdmin(&usuario)) return;
   String ssid = servidor.arg("ssid");
   String senha = servidor.arg("senha");
   bool dhcp = servidor.hasArg("dhcp");
@@ -153,7 +172,7 @@ void tratarSalvarRede() {
   }
   cfgRede.grupo = grupo;
   salvarRede();
-  registrar("Rede salva pela página: \"%s\", %s, grupo %u", cfgRede.ssid,
+  registrar("Rede salva pela página (%s): \"%s\", %s, grupo %u", usuario.c_str(), cfgRede.ssid,
             dhcp ? "IP automático" : ("IP fixo " + ip.toString()).c_str(), cfgRede.grupo);
 
   String s;
@@ -169,7 +188,7 @@ void tratarSalvarRede() {
 
 // A procura roda em segundo plano; a página pergunta de novo até a lista ficar pronta.
 void tratarRedes() {
-  if (!autorizado()) return;
+  if (!exigirAdmin()) return;
   int16_t n = WiFi.scanComplete();
   if (servidor.hasArg("novo") || n == WIFI_SCAN_FAILED) {
     WiFi.scanDelete();
@@ -203,18 +222,14 @@ void tratarRedes() {
 }
 
 void tratarReiniciar() {
-  if (!autorizado()) return;
+  String usuario;
+  if (!exigirLogin(&usuario)) return;
   responderOk("A placa vai reiniciar.");
-  agendarReinicio("pedido pela página");
+  String motivo = "pedido pela página (" + usuario + ")";
+  agendarReinicio(motivo.c_str());
 }
 
 }  // namespace
-
-bool autorizado() {
-  if (servidor.authenticate("admin", SENHA_ADMIN)) return true;
-  servidor.requestAuthentication(BASIC_AUTH, "Interlock");
-  return false;
-}
 
 void responderOk(const String& mensagem) {
   String s;
@@ -271,6 +286,9 @@ void enviarPagina(const char* const* partes, size_t quantidade) {
 }
 
 void iniciarWeb() {
+  iniciarAcesso();
+  servidor.on("/logo-claro.png", HTTP_GET, [] { enviarLogo(LOGO_CLARO, sizeof(LOGO_CLARO)); });
+  servidor.on("/logo-escuro.png", HTTP_GET, [] { enviarLogo(LOGO_ESCURO, sizeof(LOGO_ESCURO)); });
   servidor.on("/api/estado", HTTP_GET, tratarEstado);
   servidor.on("/api/rede", HTTP_POST, tratarSalvarRede);
   servidor.on("/api/redes", HTTP_GET, tratarRedes);

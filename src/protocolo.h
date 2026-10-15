@@ -12,6 +12,8 @@ constexpr char MSG_ESTADO = 'E';    // estado da placa: a cada INTERVALO_ESTADO_
 constexpr char MSG_PEDIDO = 'Q';    // porta -> portaria: pede para abrir (facial, botão, página)
 constexpr char MSG_LIBERAR = 'L';   // portaria -> porta: abra (botão ou página da portaria)
 constexpr char MSG_RESPOSTA = 'R';  // resposta a um PEDIDO ou LIBERAR
+constexpr char MSG_PEDIR_CONTAS = 'G';  // porta -> portaria: manda a lista de contas (ver contas.h)
+constexpr char MSG_CONTAS = 'C';        // portaria -> porta: a lista de contas
 
 // O que se sabe de outra placa (para a lista de placas da página).
 struct InfoPar {

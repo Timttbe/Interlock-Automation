@@ -11,6 +11,7 @@ namespace INSTANCIA {
 #include "proj/src/configuracao.cpp"
 #include "proj/src/sistema.cpp"
 #include "proj/src/protocolo.cpp"
+#include "proj/src/contas.cpp"
 #include "proj/src/porta.cpp"
 #include "proj/src/porteiro.cpp"
 #include "proj/src/main.cpp"
@@ -30,3 +31,14 @@ void atualizarWeb() {}
 void JUNTA(INSTANCIA, _setup)() { INSTANCIA::setup(); }
 void JUNTA(INSTANCIA, _loop)() { INSTANCIA::loop(); }
 void JUNTA(INSTANCIA, _regra)(int liberar) { INSTANCIA::cfgOperacao.liberarSemComunicacao = liberar != 0; }
+// Contas, para o cenário de cópia da portaria para as portas
+bool JUNTA(INSTANCIA, _criarConta)(const char* nome, const char* senha) { return INSTANCIA::criarConta(nome, senha).isEmpty(); }
+bool JUNTA(INSTANCIA, _apagarConta)(const char* nome) { return INSTANCIA::apagarConta(nome).isEmpty(); }
+bool JUNTA(INSTANCIA, _definirSenha)(const char* nome, const char* senha) {
+  return INSTANCIA::definirSenha(nome, senha).isEmpty();
+}
+bool JUNTA(INSTANCIA, _conferirSenha)(const char* nome, const char* senha) {
+  INSTANCIA::Nivel nivel;
+  return INSTANCIA::conferirSenha(nome, senha, nivel);
+}
+uint32_t JUNTA(INSTANCIA, _versaoContas)() { return INSTANCIA::versaoContas(); }

@@ -1,13 +1,19 @@
 // Página e rotas da portaria:
-//   POST /api/abrir      porta=A ou B (igual aos botões da portaria)
-//   POST /api/bypass     ligar=1 ou 0 (bypass pela página; a chave física vale independente)
-//   POST /api/operacao   regra para porta sem comunicação
+//   POST /api/abrir           porta=A ou B (igual aos botões da portaria)
+//   POST /api/bypass          ligar=1 ou 0 (bypass pela página; a chave física vale independente)
+//   POST /api/operacao        regra para porta sem comunicação
+//   POST /api/contas/criar    admin: nome, senha
+//   POST /api/contas/apagar   admin: nome
+//   POST /api/contas/senha    admin: nome, senha (define a senha de qualquer conta)
+//   POST /api/minha-senha     atual, nova (qualquer conta, a própria senha)
 
 #include "papel.h"
 #ifdef PAPEL_PORTEIRO
 
+#include "acesso.h"
 #include "config.h"
 #include "configuracao.h"
+#include "contas.h"
 #include "json.h"
 #include "logica.h"
 #include "pagina_comum.h"
@@ -61,37 +67,95 @@ void portaJson(JsonEscritor& j, Papel papel, unsigned long agora) {
   j.fecharObjeto();
 }
 
+// Sem login: a página só tem o código; os dados vêm de /api/estado, que pede login.
 void tratarPagina() {
-  if (!autorizado()) return;
   static const char* const partes[] = {PAGINA_INICIO, CSS_COMUM, PAGINA_CABECALHO, CORPO_PORTEIRO, SECOES_COMUNS,
                                        PAGINA_SCRIPT, JS_COMUM, JS_PORTEIRO, PAGINA_FIM};
   enviarPagina(partes, sizeof(partes) / sizeof(partes[0]));
 }
 
 void tratarAbrir() {
-  if (!autorizado()) return;
+  String usuario;
+  if (!exigirLogin(&usuario)) return;
   String porta = servidor.arg("porta");
   if (porta != "A" && porta != "B") return responderErro("Porta inválida.");
   Papel papel = porta == "A" ? Papel::PORTA_A : Papel::PORTA_B;
+  registrar("%s pediu pela página para abrir a %s", usuario.c_str(), nomeExibicao(papel));
   Motivo m = abrirPelaPortaria(papel, Origem::PAGINA_PORTARIA, millis());
   if (motivoLibera(m)) return responderOk(String(nomeExibicao(papel)) + ": " + textoMotivo(m) + ", esperando a porta confirmar");
   responderErro(String(nomeExibicao(papel)) + ": abertura negada, " + textoMotivo(m));
 }
 
 void tratarBypass() {
-  if (!autorizado()) return;
+  String usuario;
+  if (!exigirLogin(&usuario)) return;
   bool ligar = servidor.arg("ligar") == "1";
-  definirBypassDaPagina(ligar);
+  definirBypassDaPagina(ligar, usuario.c_str());
   responderOk(ligar ? "Bypass da página ligado" : "Bypass da página desligado");
 }
 
 void tratarOperacao() {
-  if (!autorizado()) return;
+  String usuario;
+  if (!exigirLogin(&usuario)) return;
   cfgOperacao.liberarSemComunicacao = servidor.arg("semComunicacao") != "0";
   salvarOperacao();
-  registrar("Funcionamento alterado pela página: porta sem comunicação %s a outra",
+  registrar("Funcionamento alterado (%s): porta sem comunicação %s a outra", usuario.c_str(),
             cfgOperacao.liberarSemComunicacao ? "libera" : "bloqueia");
   responderOk("Salvo. Já está valendo.");
+}
+
+// ===== Contas (as portas recebem uma cópia; ver contas.h) =====
+
+String nomeDoPedido() {
+  String nome = servidor.arg("nome");
+  nome.trim();
+  nome.toLowerCase();
+  return nome;
+}
+
+void responder(const String& erro, const String& mensagem) {
+  if (erro.isEmpty()) {
+    responderOk(mensagem);
+  } else {
+    responderErro(erro);
+  }
+}
+
+void tratarCriarConta() {
+  if (!exigirAdmin()) return;
+  String nome = nomeDoPedido();
+  responder(criarConta(nome, servidor.arg("senha")), "Conta \"" + nome + "\" criada.");
+}
+
+void tratarApagarConta() {
+  if (!exigirAdmin()) return;
+  String nome = nomeDoPedido();
+  String erro = apagarConta(nome);
+  if (erro.isEmpty()) encerrarSessoesDe(nome.c_str(), false);
+  responder(erro, "Conta \"" + nome + "\" apagada.");
+}
+
+// O admin define a senha de qualquer conta (inclusive a dele).
+void tratarSenhaDaConta() {
+  String admin;
+  if (!exigirAdmin(&admin)) return;
+  String nome = nomeDoPedido();
+  String erro = definirSenha(nome, servidor.arg("senha"));
+  if (erro.isEmpty()) encerrarSessoesDe(nome.c_str(), nome == admin);
+  responder(erro, "Senha de \"" + nome + "\" trocada.");
+}
+
+// Qualquer conta troca a própria senha, informando a atual.
+void tratarMinhaSenha() {
+  String usuario;
+  if (!exigirLogin(&usuario)) return;
+  Nivel nivel;
+  if (!conferirSenha(usuario.c_str(), servidor.arg("atual").c_str(), nivel)) {
+    return responderErro("A senha atual não confere.");
+  }
+  String erro = definirSenha(usuario, servidor.arg("nova"));
+  if (erro.isEmpty()) encerrarSessoesDe(usuario.c_str(), true);
+  responder(erro, "Sua senha foi trocada.");
 }
 
 }  // namespace
@@ -129,6 +193,10 @@ void registrarRotasLogica(WebServer& s) {
   s.on("/api/abrir", HTTP_POST, tratarAbrir);
   s.on("/api/bypass", HTTP_POST, tratarBypass);
   s.on("/api/operacao", HTTP_POST, tratarOperacao);
+  s.on("/api/contas/criar", HTTP_POST, tratarCriarConta);
+  s.on("/api/contas/apagar", HTTP_POST, tratarApagarConta);
+  s.on("/api/contas/senha", HTTP_POST, tratarSenhaDaConta);
+  s.on("/api/minha-senha", HTTP_POST, tratarMinhaSenha);
 }
 
 #endif

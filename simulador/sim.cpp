@@ -21,12 +21,22 @@ const int BOTAO_A = 32, BOTAO_B = 33, CHAVE = 25, BUZZER_A = 26, BUZZER_B = 27;
 
 typedef void (*FnVoid)();
 typedef void (*FnRegra)(int);
+typedef bool (*FnCriarConta)(const char*, const char*);
+typedef bool (*FnApagarConta)(const char*);
+typedef bool (*FnDefinirSenha)(const char*, const char*);
+typedef bool (*FnConferirSenha)(const char*, const char*);
+typedef uint32_t (*FnVersaoContas)();
 
 // Instâncias do firmware (dev_*.cpp). As "_r" são cópias novas para simular um reinício.
-#define INSTANCIA_EXTERNA(n) \
-  void n##_setup();          \
-  void n##_loop();           \
-  void n##_regra(int);
+#define INSTANCIA_EXTERNA(n)                       \
+  void n##_setup();                                \
+  void n##_loop();                                 \
+  void n##_regra(int);                             \
+  bool n##_criarConta(const char*, const char*);   \
+  bool n##_apagarConta(const char*);               \
+  bool n##_definirSenha(const char*, const char*);  \
+  bool n##_conferirSenha(const char*, const char*); \
+  uint32_t n##_versaoContas();
 INSTANCIA_EXTERNA(porteiro)
 INSTANCIA_EXTERNA(porteiro_r)
 INSTANCIA_EXTERNA(porta_a)
@@ -35,13 +45,19 @@ INSTANCIA_EXTERNA(porta_b)
 struct Instancia {
   FnVoid setup, loop;
   FnRegra regra;
+  FnCriarConta criarConta;
+  FnApagarConta apagarConta;
+  FnDefinirSenha definirSenha;
+  FnConferirSenha conferirSenha;
+  FnVersaoContas versaoContas;
   bool usada;
 };
-Instancia I_PORTEIRO = {porteiro_setup, porteiro_loop, porteiro_regra, false};
-Instancia I_PORTEIRO_R = {porteiro_r_setup, porteiro_r_loop, porteiro_r_regra, false};
-Instancia I_PORTA_A = {porta_a_setup, porta_a_loop, porta_a_regra, false};
-Instancia I_PORTA_A_R = {porta_a_r_setup, porta_a_r_loop, porta_a_r_regra, false};
-Instancia I_PORTA_B = {porta_b_setup, porta_b_loop, porta_b_regra, false};
+#define INSTANCIA(n) {n##_setup, n##_loop, n##_regra, n##_criarConta, n##_apagarConta, n##_definirSenha, n##_conferirSenha, n##_versaoContas, false}
+Instancia I_PORTEIRO = INSTANCIA(porteiro);
+Instancia I_PORTEIRO_R = INSTANCIA(porteiro_r);
+Instancia I_PORTA_A = INSTANCIA(porta_a);
+Instancia I_PORTA_A_R = INSTANCIA(porta_a_r);
+Instancia I_PORTA_B = INSTANCIA(porta_b);
 
 SerialSim Serial;
 EspSim ESP;
@@ -196,6 +212,28 @@ void reiniciarTudo(unsigned long relogioInicial = 0) {
 void regra(int d, bool liberar) {
   atual = d;
   placas[d].inst->regra(liberar);
+}
+
+// Contas: cada chamada roda "dentro" da placa d (as contas ficam na memória de cada uma).
+bool criarConta(int d, const char* nome, const char* senha) {
+  atual = d;
+  return placas[d].inst->criarConta(nome, senha);
+}
+bool apagarConta(int d, const char* nome) {
+  atual = d;
+  return placas[d].inst->apagarConta(nome);
+}
+bool definirSenha(int d, const char* nome, const char* senha) {
+  atual = d;
+  return placas[d].inst->definirSenha(nome, senha);
+}
+bool senhaConfere(int d, const char* nome, const char* senha) {
+  atual = d;
+  return placas[d].inst->conferirSenha(nome, senha);
+}
+uint32_t versaoContas(int d) {
+  atual = d;
+  return placas[d].inst->versaoContas();
 }
 
 void acionar(int d, int pino, unsigned long ms = 150) {
@@ -571,6 +609,47 @@ void cenarioPerdaPesada() {
   confere(maiorSobreposicao == 0, "e nunca as duas ao mesmo tempo");
 }
 
+void cenarioContas() {
+  titulo("Contas criadas na portaria são copiadas para as portas");
+  reiniciarTudo();
+  confere(senhaConfere(PA, "admin", "interlock123"), "de fábrica, a porta A aceita o admin com a senha do segredos.h");
+  confere(criarConta(PORTARIA, "joao", "123456"), "portaria cria a conta joao");
+  rodar(3000);
+  confere(senhaConfere(PA, "joao", "123456") && senhaConfere(PB, "joao", "123456"), "em 3 s, as duas portas aceitam joao");
+  confere(!senhaConfere(PA, "joao", "errada"), "senha errada continua recusada na porta");
+  confere(versaoContas(PA) == versaoContas(PORTARIA) && versaoContas(PB) == versaoContas(PORTARIA),
+          "as três placas ficam com a mesma versão das contas");
+  confere(logTem(PA, "Contas atualizadas pela portaria"), "a porta registrou a cópia");
+
+  placas[PB].wifi = false;  // a porta B fica fora da rede durante a mudança
+  rodar(500);
+  apagarConta(PORTARIA, "joao");
+  criarConta(PORTARIA, "maria", "abcdef");
+  rodar(3000);
+  confere(!senhaConfere(PA, "joao", "123456") && senhaConfere(PA, "maria", "abcdef"), "porta A: joao saiu, maria entrou");
+  confere(senhaConfere(PB, "joao", "123456"), "porta B, sem rede, continua com a cópia antiga");
+  placas[PB].wifi = true;
+  rodar(8000);
+  confere(!senhaConfere(PB, "joao", "123456") && senhaConfere(PB, "maria", "abcdef"),
+          "a rede voltou: a porta B recebe a lista nova sozinha");
+  acionar(PA, FACIAL);
+  confere(liberada(PA), "e o intertravamento segue normal (facial A libera)");
+
+  // Troca de senha (Minha senha ou pelo admin): a conta mantém o nome e a senha nova vale nas 3,
+  // também depois de a portaria reiniciar.
+  rodar(10000);
+  confere(definirSenha(PORTARIA, "admin", "Nova#123"), "portaria troca a senha do admin");
+  confere(senhaConfere(PORTARIA, "admin", "Nova#123"), "portaria aceita o admin com a senha nova");
+  confere(!senhaConfere(PORTARIA, "admin", "interlock123"), "e recusa a antiga");
+  rodar(3000);
+  confere(senhaConfere(PA, "admin", "Nova#123") && senhaConfere(PB, "admin", "Nova#123"), "as portas recebem a senha nova");
+  carregar(PORTARIA, &I_PORTEIRO_R);
+  rodar(8000);
+  confere(senhaConfere(PORTARIA, "admin", "Nova#123") && senhaConfere(PORTARIA, "maria", "abcdef"),
+          "depois de reiniciar, a portaria continua com a senha nova e as outras contas");
+  confere(senhaConfere(PA, "admin", "Nova#123"), "e as portas também");
+}
+
 void cenarioEstouroMillis() {
   titulo("millis() estourando (placas ligadas há 49,7 dias)");
   reiniciarTudo(0xFFFFFFFFul - 12000);  // o contador estoura uns 4 s depois de as placas se acharem
@@ -592,7 +671,7 @@ int main(int argc, char** argv) {
       cenarioPortariaFora, cenarioPortariaAcabouDeCair, cenarioSimultaneosSemPortaria,
       [] { cenarioIsoladas(true); }, [] { cenarioIsoladas(false); }, cenarioReinicioPortaria, cenarioRepeticao,
       cenarioPortaForcada, cenarioPerdaPesada, cenarioEstouroMillis, cenarioSemPortariaComPerda,
-      cenarioBotaoPortariaContraFacial};
+      cenarioBotaoPortariaContraFacial, cenarioContas};
   int total = sizeof(cenarios) / sizeof(cenarios[0]);
   if (argc < 2) {
     printf("%d\n", total);

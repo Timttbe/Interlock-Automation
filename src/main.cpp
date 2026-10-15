@@ -7,6 +7,7 @@
 //   protocolo.cpp + sessao.cpp     mensagens UDP assinadas entre as placas
 //   rede_wifi.cpp                  Wi-Fi do roteador, IP fixo e rede própria de socorro
 //   web*.cpp + pagina_*.h          página de cada placa; atualizacao.cpp: firmware pela rede
+//   contas.cpp + acesso.cpp        contas da página (copiadas da portaria para as portas) e login
 //   configuracao.cpp               o que fica salvo na flash
 //   registro.cpp                   eventos mostrados na página
 //   sistema.cpp                    LED, botão BOOT, watchdog e reinício
@@ -15,6 +16,7 @@
 #include <Arduino.h>
 #include "config.h"
 #include "configuracao.h"
+#include "contas.h"
 #include "logica.h"
 #include "papel.h"
 #include "protocolo.h"
@@ -30,6 +32,7 @@ void setup() {
   registrar("%s ligou. Firmware %s. Último reinício: %s", nomeExibicao(MEU_PAPEL), FW_VERSAO, motivoDoReinicio());
   iniciarSistema();
   iniciarWifi();
+  iniciarContas();  // depois do Wi-Fi: com o rádio ligado, os números sorteados são aleatórios de verdade
   iniciarProtocolo(tratarMensagem);
   iniciarWeb();
 }

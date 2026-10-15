@@ -2,7 +2,7 @@
 
 ![Main Device](https://img.shields.io/badge/Platform-ESP32-blue?logo=espressif)
 ![Framework](https://img.shields.io/badge/Framework-Arduino%20%2B%20PlatformIO-orange?logo=platformio)
-![Version](https://img.shields.io/badge/Firmware-v7.0.0-informational)
+![Version](https://img.shields.io/badge/Firmware-v7.1.1-informational)
 ![Status](https://img.shields.io/badge/Status-Active-success)
 
 ---
@@ -23,8 +23,9 @@ desk until it closes.
 | **PORTEIRO** (doorman) | button "open A", button "open B", bypass switch | buzzer A, buzzer B |
 | **PORTA_A** / **PORTA_B** (doors) | door sensor, face reader (dry contact), push button | electromagnetic lock, push/pull sign |
 
-Every board has its own web page (status, virtual buttons, network settings, firmware update) and its
-own fallback Wi-Fi network for when the router is unreachable.
+Every board has its own web page (status, virtual buttons, network settings, firmware update) with
+login, user accounts and a light/dark theme, and its own fallback Wi-Fi network for when the router is
+unreachable.
 
 ---
 
@@ -35,6 +36,20 @@ own fallback Wi-Fi network for when the router is unreachable.
     <img src="https://img.youtube.com/vi/LeEWyhVxUkA/0.jpg" width="600">
   </a>
 </p>
+
+---
+
+## What's new in v7.1
+
+- **Login page** instead of the browser's password popup; the session lasts until you log out, the
+  board restarts or 12 h without use.
+- **User accounts:** the `admin` creates and deletes user accounts on the PORTEIRO's page, and they
+  are copied to both doors automatically. Users can open doors, toggle the bypass, change times and
+  rules and restart a board; only the `admin` changes the network/Wi-Fi, updates the firmware and
+  manages accounts. Everyone can change their own password.
+- **Light / dark theme** button (remembered by the browser; follows the system the first time).
+- **Restart** button in the page header.
+- **Wires logo** in the page header.
 
 ---
 
@@ -125,7 +140,7 @@ supplies about 20 mA at 3.3 V; for a louder 5 V/12 V buzzer, drive it through an
 
 Common to all boards: **GPIO 2** status LED (on = Wi-Fi OK, slow blink = no Wi-Fi, fast blink = own
 network on) and the **BOOT** button (hold 10 s until the LED blinks very fast, then release: restores
-factory network settings).
+factory network settings and the admin password `SENHA_ADMIN`; other accounts are kept).
 
 On the doors, relay channels 3 and 4 are free. Pins, relay/buzzer active level and sensor polarity
 are in [`include/config.h`](include/config.h).
@@ -156,12 +171,13 @@ are in [`include/config.h`](include/config.h).
 Copy `include/segredos.exemplo.h` to `include/segredos.h` (ignored by git) and change both values:
 
 ```cpp
-#define SENHA_ADMIN "..."  // web page (user "admin"), fallback Wi-Fi and network updates. 8–63 chars
+#define SENHA_ADMIN "..."  // first password of user "admin" and the fallback Wi-Fi password. 8–63 chars
 #define CHAVE_REDE  "..."  // signs the messages between boards. 16+ chars
 ```
 
 All three boards must be built with the same `segredos.h`. While the example values are in use, every
-page shows a red warning.
+page shows a red warning. `SENHA_ADMIN` is only the admin's *initial* password: once it is changed on
+the page (**Contas → Minha senha**), the new one is kept in flash and copied to the doors.
 
 ### 3. Flash each board (USB)
 
@@ -183,13 +199,16 @@ With no Wi-Fi configured, each board opens its own network:
 | PORTA_A | `Interlock-PortaA` | `http://192.168.4.1` |
 | PORTA_B | `Interlock-PortaB` | `http://192.168.4.1` |
 
-Network password and page password: `SENHA_ADMIN` (user `admin`). In **Rede**, pick the router
+Network password: `SENHA_ADMIN`. Log in as `admin` with `SENHA_ADMIN`. In **Rede**, pick the router
 (**Procurar redes**), type its password, choose automatic IP or a fixed IP/mask/gateway, and save.
 The board restarts and joins the router. Do the same on the other two boards.
 
 Then open any board by its router IP or by name (`http://interlock-portaria.local`,
 `http://interlock-porta-a.local`, `http://interlock-porta-b.local`). The PORTEIRO's page lists all
 three boards with links to each one.
+
+On the PORTEIRO's page, change the admin password (**Contas → Minha senha**) and create one account
+per person who needs the page (**Contas → Nova conta**).
 
 > Use `http://`, not `https://`: the ESP32 does not serve HTTPS.
 
@@ -207,8 +226,29 @@ PORTEIRO and the other door, live inputs (sensor, face reader, button, with a wa
 looks stuck), relays, opening time, alarm time and the "no news of the other door" rule.
 
 **All boards:** Wi-Fi status, network settings (with network scan), event log with time (when the
-router has internet), firmware update, restart. The page refreshes itself every second and works
-without internet (nothing is loaded from outside the board).
+router has internet), firmware update, restart, light/dark theme. The page refreshes itself every
+second and works without internet (nothing is loaded from outside the board). Actions are recorded in
+the event log with the account name.
+
+### Accounts and permissions
+
+The page opens on a login screen. Accounts live on the PORTEIRO and are copied to both doors, so the
+same user and password work on all three boards (a door that was offline gets the copy when it comes
+back). Up to 10 accounts.
+
+| Action | `admin` | users |
+|---|:-:|:-:|
+| See the status and the event log | ✓ | ✓ |
+| Open doors, toggle the bypass from the page | ✓ | ✓ |
+| Change opening/alarm time and the "no communication" rule | ✓ | ✓ |
+| Restart a board | ✓ | ✓ |
+| Change own password (on the PORTEIRO) | ✓ | ✓ |
+| Network / Wi-Fi settings | ✓ | |
+| Firmware update | ✓ | |
+| Create and delete accounts, reset a user's password | ✓ | |
+
+The `admin` account cannot be deleted. Forgot the admin password: BOOT button (see Hardware) on the
+PORTEIRO restores `SENHA_ADMIN` and the copy reaches the doors; the other accounts are kept.
 
 ---
 
@@ -236,8 +276,8 @@ forward broadcasts between them (default on home and small-business routers).
 
 - **From the page:** *Manutenção → Firmware*, choose `.pio/build/<environment>/firmware.bin`.
 - **From VS Code:** set the board's IP in `upload_port` of the `*_ota` environment in
-  `platformio.ini`, create an environment variable `INTERLOCK_SENHA` with the `SENHA_ADMIN`, and run
-  **Project Tasks → `porta_a_ota` → Upload**.
+  `platformio.ini`, create an environment variable `INTERLOCK_SENHA` with the **current** password of
+  the `admin` account, and run **Project Tasks → `porta_a_ota` → Upload**.
 
 Each board only accepts its own role's firmware (a marker inside the binary is checked), so the
 PORTEIRO firmware cannot be flashed on a door by mistake. During the upload the board stops (door
@@ -250,8 +290,13 @@ current firmware.
 
 ## Security
 
-- Web page, fallback network and network updates require `SENHA_ADMIN` (HTTP Basic auth over plain
-  HTTP on the local network).
+- Web page: login with user accounts. Passwords are stored as PBKDF2-HMAC-SHA256 hashes with a random
+  salt, never in plain text. Sessions use an `HttpOnly`, `SameSite=Strict` cookie; 5 wrong passwords in
+  a minute block logins for 30 s. Everything travels over plain HTTP on the local network.
+- Network firmware upload from VS Code uses HTTP Basic auth (admin only); the page itself never does.
+- Accounts are copied from the PORTEIRO to the doors in signed messages, with the password hashes
+  encrypted with `CHAVE_REDE`.
+- The fallback Wi-Fi network uses `SENHA_ADMIN` (WPA2).
 - Every message between boards is signed with HMAC-SHA256 (`CHAVE_REDE`). A device on the network
   without the key cannot open a door.
 - Replay protection: each board picks a random session at boot and numbers its messages; a recorded
@@ -271,10 +316,12 @@ ITL1|group|origin|session|seq|echo P,echo A,echo B|type|data|signature
 
 | Type | Direction | Data |
 |---|---|---|
-| `E` state | every board → all (broadcast every 1 s, plus 3× direct when it changes) | door: `lib` unlocked, `abe` open, `alm` alarm, `rest` ms left, `ha` s open, `lbp` bypass release, `ori` origin, `modo`; PORTEIRO: `byp`, `chv`, `vir`; all: `rssi`, `fw`, `up` |
+| `E` state | every board → all (broadcast every 1 s, plus 3× direct when it changes) | door: `lib` unlocked, `abe` open, `alm` alarm, `rest` ms left, `ha` s open, `lbp` bypass release, `ori` origin, `modo`; PORTEIRO: `byp`, `chv`, `vir`, `ctv` accounts version; all: `rssi`, `fw`, `up` |
 | `Q` request | door → PORTEIRO | `id`, `ori` |
 | `L` release | PORTEIRO → door | `id`, `byp`, `ori` |
 | `R` answer | reply to `Q` / `L` | `id`, `ok`, `mot` (reason), `byp` |
+| `G` get accounts | door → PORTEIRO, when `ctv` differs from its copy | — |
+| `C` accounts | PORTEIRO → door | `v` version, `n` count, `c` list of name:level:encrypted salt+hash |
 
 Requests and commands are repeated every 150 ms until answered; a repeated `id` gets the same answer
 without acting twice.
@@ -297,8 +344,8 @@ Wi-Fi, default times, relock-on-close (`TRAVAR_AO_FECHAR`), intermittent buzzer
 - **Unit tests** of the interlock rules and replay protection (`test/test_intertravamento`):
   `pio test -e testes` on any ESP32 connected by USB, or `pio test -e testes_pc` on a PC with gcc.
 - **Simulator** ([`simulador/`](simulador/README.md)): runs the real firmware of the three boards on
-  the PC over a simulated network with packet loss, reboots, attacks and clock overflow (20
-  scenarios). Also builds the web pages for viewing in a browser without hardware.
+  the PC over a simulated network with packet loss, reboots, attacks, clock overflow and account
+  copying (21 scenarios). Also builds the web pages for viewing in a browser without hardware.
 
 ---
 
@@ -315,13 +362,16 @@ src/
   intertravamento.cpp     interlock rules (pure, unit tested)
   protocolo.cpp           signed UDP messages sessao.cpp     replay protection (pure, unit tested)
   rede_wifi.cpp           router, fixed IP, fallback network
+  contas.cpp              accounts, password hashes, copy to the doors
+  acesso.cpp              login, sessions, permissions
   web.cpp                 common routes       web_porta.cpp / web_porteiro.cpp  role routes
-  pagina_*.h              web page (HTML/CSS/JS)
+  pagina_*.h              web page (HTML/CSS/JS)   logo.h  logo PNGs (generated)
   atualizacao.cpp         firmware upload     configuracao.cpp  settings in flash
   registro.cpp            event log           sistema.cpp       LED, BOOT button, watchdog
   entradas.cpp            debounced inputs, outputs
 test/                     unit tests
 simulador/                full-system simulator
+ferramentas/              logo source (WiresIcon.png) and gerar_logo.ps1 (regenerates src/logo.h)
 Prototype 1/              ESP-01 + ESP-NOW prototype
 Prototype 2/              ESP8266 v6 firmware (previous generation)
 ```

@@ -6,48 +6,71 @@
 //   PAGINA_INICIO + CSS_COMUM + PAGINA_CABECALHO + corpo do papel + SECOES_COMUNS
 //   + PAGINA_SCRIPT + JS_COMUM + script do papel + PAGINA_FIM
 // O script do papel define desenhar(e) e rapido(), e chama ciclo() no fim.
+//
+// Sem login, a página mostra a tela de login (os dados vêm de /api/estado, que pede login).
+// Elementos com a classe "so-admin" só aparecem para o admin (as rotas também conferem).
+
+#include "config.h"
 
 static const char PAGINA_INICIO[] = R"HTML(<!DOCTYPE html>
 <html lang="pt-BR"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Interlock</title><style>)HTML";
+<title>Interlock</title>
+<script>try{document.documentElement.dataset.tema=localStorage.getItem('tema')||(matchMedia('(prefers-color-scheme: light)').matches?'claro':'escuro')}catch(e){document.documentElement.dataset.tema='escuro'}</script>
+<style>)HTML";
 
 static const char CSS_COMUM[] = R"CSS(
-:root{--fundo:#0b0d10;--card:#14181d;--card2:#1b2027;--borda:#2a313a;--texto:#e6e9ee;--mudo:#8a94a3;
---ouro:#f5a623;--ouro2:#d48c14;--ok:#3fb950;--perigo:#f85149;--info:#58a6ff;--laranja:#f0883e}
+:root{color-scheme:dark;--fundo:#0b0d10;--card:#14181d;--card2:#1b2027;--borda:#2a313a;--linha:#1f252d;--texto:#e6e9ee;
+--mudo:#8a94a3;--ouro:#f5a623;--ouro2:#d48c14;--ouroTexto:#f5a623;--ouroFundo:#33260c;--ouroBorda:#7a5512;
+--ok:#3fb950;--okBorda:#2e6b39;--perigo:#f85149;--perigoFundo:#3d1416;--perigoBorda:#7d2a27;--perigoTexto:#ffb3ae;
+--info:#58a6ff;--infoFundo:#132235;--laranja:#f0883e;--laranjaFundo:#3a2412;--sombra:rgba(0,0,0,.5)}
+:root[data-tema=claro]{color-scheme:light;--fundo:#f3f4f6;--card:#fff;--card2:#f0f2f5;--borda:#d5dae1;--linha:#e8ebef;
+--texto:#1b1f24;--mudo:#5d6877;--ouro:#f0a500;--ouro2:#d29000;--ouroTexto:#9a6400;--ouroFundo:#fff3d6;--ouroBorda:#e9c56f;
+--ok:#1a7f37;--okBorda:#9fd3ad;--perigo:#cf222e;--perigoFundo:#ffe9e9;--perigoBorda:#f2b6b6;--perigoTexto:#a11d27;
+--info:#0969da;--infoFundo:#e1edfc;--laranja:#bc4c00;--laranjaFundo:#ffe9d9;--sombra:rgba(0,0,0,.15)}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 body{margin:0;background:var(--fundo);color:var(--texto);font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
-header{position:sticky;top:0;z-index:5;background:var(--card);border-bottom:1px solid var(--borda);padding:10px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-.marca{font-weight:800;letter-spacing:3px;color:var(--ouro);line-height:1.1}
-.marca small{display:block;font-weight:500;letter-spacing:1px;color:var(--mudo);font-size:11px}
-header .dir{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap}
+body:not(.logado) header,body:not(.logado) main{display:none}
+body:not(.admin) .so-admin{display:none!important}
+.logo{display:block;height:30px;width:auto}
+:root[data-tema=claro] .logo-escuro,:root:not([data-tema=claro]) .logo-claro{display:none}
+header{position:sticky;top:0;z-index:5;background:var(--card);border-bottom:1px solid var(--borda);padding:8px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.marca{display:flex;flex-direction:column;gap:2px}
+.marca span{font-size:10px;font-weight:700;letter-spacing:3px;color:var(--mudo);text-transform:uppercase}
+header .dir{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+#topo{display:flex;gap:6px;flex-wrap:wrap}
+.quem{font-size:13px;color:var(--mudo)}
+button.icone{margin:0;padding:5px 10px;font-size:13px;font-weight:600;background:transparent;color:var(--texto);border:1px solid var(--borda)}
+button.icone:hover{background:var(--card2)}
 main{max-width:1000px;margin:0 auto;padding:16px}
-h2{font-size:13px;letter-spacing:2px;text-transform:uppercase;color:var(--ouro);margin:26px 0 10px;border-bottom:1px solid var(--borda);padding-bottom:6px}
+h2{font-size:13px;letter-spacing:2px;text-transform:uppercase;color:var(--ouroTexto);margin:26px 0 10px;border-bottom:1px solid var(--borda);padding-bottom:6px}
 h3{margin:0 0 8px;font-size:15px;letter-spacing:1px}
 .grade{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
 .card{background:var(--card);border:1px solid var(--borda);border-radius:8px;padding:14px;min-width:0}
-.linha{display:flex;justify-content:space-between;gap:12px;padding:5px 0;border-bottom:1px solid #1f252d;font-size:14px}
+.linha{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:5px 0;border-bottom:1px solid var(--linha);font-size:14px}
 .linha:last-child{border-bottom:0}
 .linha>span:first-child{color:var(--mudo)}
 .linha>span:last-child{text-align:right;overflow-wrap:anywhere}
 .pill{display:inline-block;padding:1px 9px;border-radius:999px;font-size:12px;font-weight:600;border:1px solid var(--borda);color:var(--mudo);white-space:nowrap}
-.pill.ok{color:var(--ok);border-color:#2e6b39}
-.pill.aviso{color:var(--ouro);border-color:#7a5512}
-.pill.perigo{color:var(--perigo);border-color:#7d2a27}
+.pill.ok{color:var(--ok);border-color:var(--okBorda)}
+.pill.aviso{color:var(--ouroTexto);border-color:var(--ouroBorda)}
+.pill.perigo{color:var(--perigo);border-color:var(--perigoBorda)}
 .vermelho{color:var(--perigo)}
 .estado{font-size:22px;font-weight:800;letter-spacing:1px;padding:12px;border-radius:6px;text-align:center;margin:4px 0 8px}
-.est-fechada{background:#132235;color:var(--info)}
-.est-liberada{background:#33260c;color:var(--ouro)}
-.est-aberta{background:#3a2412;color:var(--laranja)}
-.est-alarme{background:#3d1416;color:var(--perigo);animation:pisca 1s infinite}
+.est-fechada{background:var(--infoFundo);color:var(--info)}
+.est-liberada{background:var(--ouroFundo);color:var(--ouroTexto)}
+.est-aberta{background:var(--laranjaFundo);color:var(--laranja)}
+.est-alarme{background:var(--perigoFundo);color:var(--perigo);animation:pisca 1s infinite}
 .est-off{background:var(--card2);color:var(--mudo)}
 @keyframes pisca{50%{opacity:.55}}
 button{font:inherit;cursor:pointer;border-radius:6px;padding:10px 16px;border:1px solid var(--ouro);background:var(--ouro);color:#111;font-weight:700;margin-top:12px}
 button:hover{background:var(--ouro2)}
-button.sec{background:transparent;color:var(--ouro)}
-button.sec:hover{background:#33260c}
+button.sec{background:transparent;color:var(--ouroTexto)}
+button.sec:hover{background:var(--ouroFundo)}
 button.perigo{background:transparent;border-color:var(--perigo);color:var(--perigo)}
+button.perigo:hover{background:var(--perigoFundo)}
+button.pequeno{margin:0 0 0 6px;padding:3px 9px;font-size:12px}
 button:disabled{opacity:.5;cursor:not-allowed}
 .abrir{width:100%;font-size:18px;padding:14px;letter-spacing:1px}
 .res{font-size:13px;color:var(--mudo);min-height:1.4em;margin-top:8px}
@@ -61,11 +84,11 @@ label.check{display:flex;align-items:center;gap:8px;margin-top:14px;color:var(--
 label.check input{display:inline;width:auto;margin:0}
 .dica{font-size:12px;color:var(--mudo);margin-top:6px}
 .faixa{padding:10px 14px;border-radius:6px;margin-bottom:10px;font-size:14px}
-.faixa.aviso{background:#33260c;color:var(--ouro);border:1px solid #5c4413}
-.faixa.perigo{background:#3d1416;color:#ffb3ae;border:1px solid #6e2226}
+.faixa.aviso{background:var(--ouroFundo);color:var(--ouroTexto);border:1px solid var(--ouroBorda)}
+.faixa.perigo{background:var(--perigoFundo);color:var(--perigoTexto);border:1px solid var(--perigoBorda)}
 .faixa a{color:inherit}
 .registro{font-family:ui-monospace,Consolas,monospace;font-size:13px;max-height:340px;overflow:auto}
-.registro div{padding:3px 0;border-bottom:1px solid #1f252d}
+.registro div{padding:3px 0;border-bottom:1px solid var(--linha)}
 .registro time{color:var(--mudo);margin-right:8px}
 .tabela{overflow-x:auto}
 table{width:100%;border-collapse:collapse;font-size:14px}
@@ -76,14 +99,44 @@ th{color:var(--mudo);font-weight:500;font-size:12px;text-transform:uppercase;let
 #listaRedes small{color:var(--mudo)}
 progress{width:100%;margin-top:10px;accent-color:var(--ouro)}
 a{color:var(--info)}
-.toast{position:fixed;left:50%;bottom:20px;transform:translate(-50%,200%);background:var(--card2);border:1px solid var(--borda);padding:10px 16px;border-radius:8px;transition:transform .25s;max-width:calc(100vw - 32px);z-index:10}
+.login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px}
+.login form{width:100%;max-width:340px;padding:24px;box-shadow:0 8px 30px var(--sombra)}
+.login .logo{height:46px;margin:0 auto 6px}
+.login h3{text-align:center;color:var(--mudo);font-weight:600;font-size:12px;letter-spacing:3px;text-transform:uppercase;margin-bottom:12px}
+.login button{width:100%}
+.toast{position:fixed;left:50%;bottom:20px;transform:translate(-50%,200%);background:var(--card2);border:1px solid var(--borda);box-shadow:0 4px 16px var(--sombra);padding:10px 16px;border-radius:8px;transition:transform .25s;max-width:calc(100vw - 32px);z-index:10}
 .toast.mostra{transform:translate(-50%,0)}
 .toast.ok{border-color:var(--ok)}
 .toast.erro{border-color:var(--perigo)}
 )CSS";
 
 static const char PAGINA_CABECALHO[] = R"HTML(</style></head><body>
-<header><div class="marca">WIRES<small>Interlock</small></div><b id="nomePlaca"></b><div class="dir" id="topo"></div></header>
+<div id="login" class="login" hidden>
+<form class="card" id="formLogin">
+<img class="logo logo-claro" src="/logo-claro.png?v=)HTML" FW_VERSAO R"HTML(" alt="Wires">
+<img class="logo logo-escuro" src="/logo-escuro.png?v=)HTML" FW_VERSAO R"HTML(" alt="Wires">
+<h3 id="loginTitulo">Interlock</h3>
+<label>Usuário<input name="usuario" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>
+<label>Senha<input name="senha" type="password" autocomplete="current-password" required></label>
+<button>Entrar</button>
+<div class="res erro" id="loginErro"></div>
+</form>
+</div>
+<header>
+<div class="marca">
+<img class="logo logo-claro" src="/logo-claro.png?v=)HTML" FW_VERSAO R"HTML(" alt="Wires">
+<img class="logo logo-escuro" src="/logo-escuro.png?v=)HTML" FW_VERSAO R"HTML(" alt="Wires">
+<span>Interlock</span>
+</div>
+<b id="nomePlaca"></b>
+<div class="dir">
+<span id="topo"></span>
+<span class="quem" id="quem"></span>
+<button type="button" class="icone" id="btnTema" title="Tema claro ou escuro">◐ Tema</button>
+<button type="button" class="icone" id="btnReiniciar" title="Reiniciar esta placa">⟳ Reiniciar</button>
+<button type="button" class="icone" id="btnSair">Sair</button>
+</div>
+</header>
 <main>
 <div id="offline" class="faixa perigo" hidden>Sem resposta da placa. Tentando de novo...</div>
 <div id="faixas"></div>
@@ -101,7 +154,7 @@ static const char SECOES_COMUNS[] = R"HTML(
 <h2>Rede</h2>
 <div class="grade">
 <div class="card"><h3>Agora</h3><div id="redeAtual"></div></div>
-<form class="card" id="formRede" autocomplete="off"><h3>Configurar</h3>
+<form class="card so-admin" id="formRede" autocomplete="off"><h3>Configurar</h3>
 <label>Nome do Wi-Fi<input name="ssid" maxlength="32" required></label>
 <button type="button" class="sec" id="btnProcurar">Procurar redes</button>
 <div id="listaRedes"></div>
@@ -123,11 +176,10 @@ static const char SECOES_COMUNS[] = R"HTML(
 <h2>Manutenção</h2>
 <div class="grade">
 <div class="card"><h3>Placa</h3><div id="sistema"></div></div>
-<form class="card" id="formFirmware"><h3>Firmware</h3>
+<form class="card so-admin" id="formFirmware"><h3>Firmware</h3>
 <label>Arquivo firmware.bin da pasta .pio/build/<span id="envNome"></span><input type="file" name="firmware" accept=".bin" required></label>
 <progress id="progresso" max="100" value="0" hidden></progress>
 <button>Enviar firmware</button>
-<button type="button" class="perigo" id="btnReiniciar">Reiniciar a placa</button>
 </form>
 </div>
 </main>
@@ -150,6 +202,7 @@ function aviso(texto,erro){const t=$('#toast');t.textContent=texto;t.className='
 async function api(url,dados){
   const r=await fetch(url,{method:'POST',body:new URLSearchParams(dados||{})});
   let j={};try{j=await r.json()}catch(e){}
+  if(r.status===401&&url!=='/api/entrar')mostrarLogin();
   if(!r.ok||j.ok===false)throw new Error(j.erro||('A placa respondeu '+r.status));
   return j}
 
@@ -186,12 +239,16 @@ async function acao(url,dados){
 
 function desenharComum(e){
   document.title=e.nome+' · Interlock';
+  document.body.classList.add('logado');
+  document.body.classList.toggle('admin',e.conta.admin);
   $('#nomePlaca').textContent=e.nome;
   $('#topo').innerHTML=(e.wifi.conectado?pill(e.wifi.ip,'ok'):pill('sem Wi-Fi','perigo'))+(e.ap.ligado?pill('rede própria ligada','aviso'):'');
+  $('#quem').innerHTML=esc(e.conta.nome)+(e.conta.admin?' '+pill('admin','aviso'):'');
   let f='';
-  if(e.senhaPadrao)f+='<div class="faixa perigo">Senhas de exemplo em uso. Crie include/segredos.h com senhas próprias e grave de novo as 3 placas.</div>';
+  if(e.conta.admin&&e.senhaPadrao)f+='<div class="faixa perigo">A senha da rede própria e a chave entre as placas ainda são as de exemplo. Crie include/segredos.h com valores próprios e grave de novo as 3 placas.</div>';
+  if(e.conta.senhaDeFabrica)f+='<div class="faixa aviso">A conta admin ainda usa a senha de fábrica. Troque em '+(e.papel==='PORTEIRO'?'Contas → Minha senha':'Contas, na página da portaria')+'.</div>';
   if(e.conflito)f+='<div class="faixa perigo">A placa '+esc(e.conflito)+' também foi gravada como '+esc(e.nome)+'. Cada placa precisa de um papel diferente.</div>';
-  if(!e.cfgRede.ssid)f+='<div class="faixa aviso">Wi-Fi não configurado: preencha a seção Rede.</div>';
+  if(!e.cfgRede.ssid)f+='<div class="faixa aviso">Wi-Fi não configurado'+(e.conta.admin?': preencha a seção Rede.':'.')+'</div>';
   else if(!e.wifi.conectado)f+='<div class="faixa aviso">Sem conexão com o Wi-Fi "'+esc(e.cfgRede.ssid)+'". A placa continua tentando sozinha.</div>';
   $('#faixas').innerHTML=f;
 
@@ -215,7 +272,7 @@ function desenharComum(e){
     linha('MAC',esc(w.mac))+
     linha('Rede própria',e.ap.ligado?esc(e.ap.nome)+' · '+esc(e.ap.ip)+' · '+e.ap.clientes+' conectado(s)':'desligada')+
     linha('Grupo',esc(c.grupo));
-  if(!redePreenchida)preencherRede(e);
+  if(!redePreenchida&&e.conta.admin)preencherRede(e);
 
   $('#sistema').innerHTML=
     linha('Placa',esc(e.nome)+' ('+esc(e.papel)+')')+
@@ -243,8 +300,16 @@ function aguardarReinicio(novoIp){
     o.innerHTML='Reiniciando a placa. Ela vai voltar em <a href="http://'+esc(novoIp)+'/">http://'+esc(novoIp)+'/</a>.';
     return}
   o.textContent='Reiniciando a placa. A página recarrega sozinha quando ela voltar.';
-  const tentar=()=>fetch('/api/estado',{cache:'no-store'}).then(r=>{if(r.ok)location.reload();else setTimeout(tentar,2000)}).catch(()=>setTimeout(tentar,2000));
+  // Depois de reiniciar a sessão acabou: a placa responde 401 e a página volta para o login.
+  const tentar=()=>fetch('/api/estado',{cache:'no-store'}).then(r=>{if(r.ok||r.status===401)location.reload();else setTimeout(tentar,2000)}).catch(()=>setTimeout(tentar,2000));
   setTimeout(tentar,5000)}
+
+function mostrarLogin(){
+  esperando=false;clearTimeout(timer);
+  document.body.classList.remove('logado','admin');
+  if(!$('#login').hidden)return;
+  $('#login').hidden=false;
+  setTimeout(()=>$('#formLogin').usuario.focus(),50)}
 
 // Consulta a placa a cada segundo (300 ms enquanto espera uma resposta). Chamada fora de hora
 // (depois de um botão), consulta já: se uma consulta estiver em andamento, faz outra logo depois.
@@ -255,12 +320,27 @@ async function ciclo(){
   clearTimeout(timer);buscando=true;
   try{
     const r=await fetch('/api/estado',{cache:'no-store'});
+    if(r.status===401){buscando=false;deNovo=false;mostrarLogin();return}
     if(!r.ok)throw new Error();
-    E=await r.json();falhas=0;$('#offline').hidden=true;
+    E=await r.json();falhas=0;$('#offline').hidden=true;$('#login').hidden=true;
     desenharComum(E);desenhar(E)}
   catch(e){if(++falhas>=3)$('#offline').hidden=false}
   buscando=false;
   timer=setTimeout(ciclo,deNovo?0:rapido()?300:1000);deNovo=false}
+
+$('#formLogin').onsubmit=async ev=>{
+  ev.preventDefault();
+  const f=ev.target,erro=$('#loginErro');erro.textContent='';
+  try{await api('/api/entrar',new FormData(f));f.senha.value='';redePreenchida=false;opPreenchido=false;ciclo()}
+  catch(e){erro.textContent=e.message;f.senha.select()}};
+$('#btnSair').onclick=async()=>{try{await api('/api/sair')}catch(e){}location.reload()};
+$('#btnTema').onclick=()=>{
+  const tema=document.documentElement.dataset.tema==='claro'?'escuro':'claro';
+  document.documentElement.dataset.tema=tema;
+  try{localStorage.setItem('tema',tema)}catch(e){}};
+$('#btnReiniciar').onclick=async()=>{
+  if(!E||!confirm('Reiniciar '+E.nome+' agora? Durante o reinício (uns 10 s) a porta fica travada.'))return;
+  try{const j=await api('/api/reiniciar');aviso(j.msg);aguardarReinicio()}catch(e){aviso(e.message,true)}};
 
 $('#formRede').dhcp.onchange=modoIp;
 $('#formRede').onsubmit=async ev=>{
@@ -296,10 +376,6 @@ $('#formFirmware').onsubmit=ev=>{
     if(x.status===200&&j.ok){aviso(j.msg);aguardarReinicio()}else{p.hidden=true;aviso(j.erro||('Falhou ('+x.status+')'),true)}};
   x.onerror=()=>{p.hidden=true;aviso('A conexão caiu durante o envio.',true)};
   x.open('POST','/api/atualizar');x.send(fd)};
-
-$('#btnReiniciar').onclick=async()=>{
-  if(!E||!confirm('Reiniciar '+E.nome+' agora?'))return;
-  try{const j=await api('/api/reiniciar');aviso(j.msg);aguardarReinicio()}catch(e){aviso(e.message,true)}};
 
 // Formulário "Funcionamento" (cada página preenche os campos dela em desenhar()).
 let opPreenchido=false;

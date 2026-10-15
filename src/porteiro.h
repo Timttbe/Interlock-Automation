@@ -42,7 +42,7 @@ Motivo abrirPelaPortaria(Papel porta, Origem origem, unsigned long agora);
 
 bool bypassAtivo();
 bool bypassDaPagina();
-void definirBypassDaPagina(bool ligado);
+void definirBypassDaPagina(bool ligado, const char* quem);
 
 const Entrada& botaoPortaA();
 const Entrada& botaoPortaB();

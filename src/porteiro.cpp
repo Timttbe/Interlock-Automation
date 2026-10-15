@@ -15,6 +15,7 @@
 #include "porteiro.h"
 #include "config.h"
 #include "configuracao.h"
+#include "contas.h"
 #include "logica.h"
 #include "protocolo.h"
 #include "registro.h"
@@ -166,11 +167,11 @@ VisaoPorta visaoDaPorta(Papel porta, unsigned long agora) {
 bool bypassAtivo() { return chave.ativa() || bypassPagina; }
 bool bypassDaPagina() { return bypassPagina; }
 
-void definirBypassDaPagina(bool ligado) {
+void definirBypassDaPagina(bool ligado, const char* quem) {
   if (ligado == bypassPagina) return;
   bypassPagina = ligado;
   agenda.mudou();
-  registrar("Bypass pela página %s", ligado ? "LIGADO" : "desligado");
+  registrar("Bypass pela página %s (%s)", ligado ? "LIGADO" : "desligado", quem);
 }
 
 Motivo avaliarAbertura(Papel porta, unsigned long agora) { return avaliar(porta, true, agora); }
@@ -249,8 +250,9 @@ void atualizarLogica(unsigned long agora) {
 
   bool direto;
   if (agenda.hora(agora, direto)) {
-    char dados[40];
-    snprintf(dados, sizeof(dados), "byp=%d;chv=%d;vir=%d", bypassAtivo(), chave.ativa(), bypassPagina);
+    char dados[48];
+    snprintf(dados, sizeof(dados), "byp=%d;chv=%d;vir=%d;ctv=%08x", bypassAtivo(), chave.ativa(), bypassPagina,
+             static_cast<unsigned>(versaoContas()));  // as portas pedem a lista de contas se mudar
     enviarEstado(dados, direto);
   }
 }
@@ -262,6 +264,7 @@ void tratarMensagem(Papel origem, char tipo, const char* dados, unsigned long ag
     case MSG_ESTADO: tratarEstadoPorta(i, dados, agora); break;
     case MSG_PEDIDO: tratarPedido(origem, dados, agora); break;
     case MSG_RESPOSTA: tratarResposta(i, dados, agora); break;
+    case MSG_PEDIR_CONTAS: enviarPara(origem, MSG_CONTAS, contasParaMensagem()); break;
     default: break;
   }
 }

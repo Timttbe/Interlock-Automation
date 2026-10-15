@@ -3,6 +3,7 @@
 #include <esp_task_wdt.h>
 #include "config.h"
 #include "configuracao.h"
+#include "contas.h"
 #include "entradas.h"
 #include "logica.h"
 #include "rede_wifi.h"
@@ -35,7 +36,8 @@ void iniciarSistema() {
 void atualizarSistema(unsigned long agora) {
   if (!jaIniciou && agora >= INICIANDO_MS) jaIniciou = true;
 
-  // Botão BOOT: segurar 10 s (até o LED piscar bem rápido) e soltar restaura a rede de fábrica.
+  // Botão BOOT: segurar 10 s (até o LED piscar bem rápido) e soltar restaura a rede de fábrica e
+  // a senha do admin (a SENHA_ADMIN do segredos.h). As outras contas continuam.
   // Só vale ao soltar, e não se ficar mais de 30 s apertado: em algumas placas o monitor serial
   // consegue segurar o GPIO0 em LOW pelo circuito de gravação automática.
   unsigned long apertadoHa = agora - botaoBoot.mudouEm();
@@ -45,7 +47,8 @@ void atualizarSistema(unsigned long agora) {
     } else if (!redeRestaurada && apertadoHa >= RESTAURAR_REDE_MS && apertadoHa <= 3 * RESTAURAR_REDE_MS) {
       redeRestaurada = true;
       restaurarRedeDeFabrica();
-      registrar("Rede de fábrica restaurada pelo botão BOOT (Wi-Fi do config.h, IP automático, grupo 1)");
+      restaurarSenhaAdmin();
+      registrar("Botão BOOT: rede de fábrica (Wi-Fi do config.h, IP automático, grupo 1) e senha do admin restauradas");
       agendarReinicio("rede restaurada");
     }
   }

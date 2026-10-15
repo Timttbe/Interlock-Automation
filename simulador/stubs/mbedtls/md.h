@@ -23,3 +23,11 @@ inline int mbedtls_md_hmac(const mbedtls_md_info_t*, const unsigned char* chave,
   }
   return 0;
 }
+
+// Contexto e PBKDF2 de mentira (contas.cpp): um hash com sal, sem as 2000 rodadas.
+struct mbedtls_md_context_t {
+  int nada;
+};
+inline void mbedtls_md_init(mbedtls_md_context_t*) {}
+inline int mbedtls_md_setup(mbedtls_md_context_t*, const mbedtls_md_info_t*, int) { return 0; }
+inline void mbedtls_md_free(mbedtls_md_context_t*) {}
