@@ -4,7 +4,7 @@
 #include <EEPROM.h>
 
 // ====================== CONFIGURAÇÕES ======================
-#define DEVICE_NAME "PORTEIRO"  // 👉 altere para "PORTA_A", "PORTA_B" ou "PORTEIRO"
+#define DEVICE_NAME "PORTA_B"  // 👉 altere para "PORTA_A", "PORTA_B" ou "PORTEIRO"
 
 // ---- Rede gerada pelo PORTEIRO (fixa, nunca muda) ----
 #define AP_SSID "PORTEIRO_AP"
